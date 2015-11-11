@@ -60,7 +60,14 @@ Scanner scanner;
 Scanner_GetNext(&scanner, lexeme, token);
 ```
 
-##ifdef etc
+#define
+O Scanner possui um mapa para defines. Este mapa é usado no ifdef ifndef.
+Depois vai ser usado para fazer a substituição das macros.
+
+#if
+Não implementado.
+
+##ifdef ifndef elseif endif
 
 Para o pré-procesador ifdef o scanner mantém o estado se deve incluir os tokens "puxados" ou ignorar.
 Casos os tokens sejam ignorados eles são todos consumidos até achar um #else ou #endif que corresponda a #else ou #ifdef.
