@@ -4,7 +4,31 @@ Parser de código C.
 
 A ideia é começar com um tokenizer + pre-processador.
 
-O tokenizer deve gerar tokens que incluem pre-processador e depois é passado para um objeto que tem estado e vai consumindo e digerindo o pré-processador.
+Descrição do algorítmo.
+
+Componentes:
+##Stream
+Stream é uma classe que puxa um caractere (já faz trabalho do utf8) e o caractere pode ser devolvido e puxado novamente.
+
+```
+Stream stream;
+
+wchar_t ch;
+Stream_GetChar(&stream, &ch)
+Stream_PutChar(&stream, ch)
+```
+##GetRawToken
+GetRawToken é uma função aonde se passa o Stream um ponteiro out para token e uma string out lexeme;
+```
+GetRawToken(stream, token, lexeme);
+```
+Esta função devolve o token e o lexeme consumindo os caracteres do stream.
+Este tokens vão incluir tokens de pre-processador também.
+
+##Scanner
+
+Scanner é um objeto que digere os tokens do pre-processador e retorna de forma continua os tokens que já fazem o #include #ifdef e processamento dos #defines.
+
 
 Exemplo:
 ```
@@ -14,7 +38,7 @@ int main()
 }
 ```
 
-Tokens
+Tokens (raw)
 
 ```
 #include
@@ -25,9 +49,11 @@ main
 )
 ```
 
-Este tokens são "puxados".
-Ao puxar o token #include ele fazer o parser do include e troca o stream para a.h e empilha ao stream anterior.
-Ao término do stream de a.h ele faz um pop deste stream e volta para o stream anterior.
+Este tokens são "puxados" pela Scanner através da GetRawToken.
+O scanner contém uma pilha de streams.  O primeiro a ser empilhado é o arquivo de entrada do parser. Os próximos são os arquivo de include.
+
+Ao puxar o token include ele criar outro stream e empilhar. O stream usado para pegar os tokens raw é sempre o stream do topo da pilha.
+Ao terminar o arquivo ele faz o pop e continua no stream anterior.
 
 ```
 Scanner scanner;
