@@ -75,6 +75,10 @@ Para achar o #else ou #endif correspondente é feita uma contagem ++ para cada #
 Ao encontrar #endif com contagem zero ele é o que fecha.
 
 
+#undef
+
+#error
+
 
 
 
