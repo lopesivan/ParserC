@@ -8,7 +8,7 @@ Descrição do algorítmo.
 
 Componentes:
 ##Stream
-Stream é uma classe que puxa um caractere (já faz trabalho do utf8) e o caractere pode ser devolvido e puxado novamente.
+Stream é uma classe que puxa um caractere  por vez (já faz trabalho do utf8) e o caractere pode ser devolvido e puxado novamente.
 
 ```
 Stream stream;
@@ -19,6 +19,7 @@ Stream_PutChar(&stream, ch)
 ```
 ##GetRawToken
 GetRawToken é uma função aonde se passa o Stream um ponteiro out para token e uma string out lexeme;
+
 ```
 GetRawToken(stream, token, lexeme);
 ```
@@ -27,8 +28,7 @@ Este tokens vão incluir tokens de pre-processador também.
 
 ##Scanner
 
-Scanner é um objeto que digere os tokens do pre-processador e retorna de forma continua os tokens que já fazem o #include #ifdef e processamento dos #defines.
-
+Scanner é um objeto que digere os tokens do pre-processador e retorna de forma continua os tokens somente da linguagem C.
 
 Exemplo:
 ```
@@ -50,21 +50,29 @@ main
 ```
 
 Este tokens são "puxados" pela Scanner através da GetRawToken.
-O scanner contém uma pilha de streams.  O primeiro a ser empilhado é o arquivo de entrada do parser. Os próximos são os arquivo de include.
 
-Ao puxar o token include ele criar outro stream e empilhar. O stream usado para pegar os tokens raw é sempre o stream do topo da pilha.
-Ao terminar o arquivo ele faz o pop e continua no stream anterior.
+Se o token não for o início do pré-processador ele retorna o token diretamente ao ser puxado.
+Se for pré-processador os tokens raw serão processados e digeridos até que um token da linguagem C possa ser retornado.
+
+#include
+O scanner contém uma pilha de streams.
+
+O primeiro a ser empilhado é o arquivo de entrada do parser. Os próximos são os arquivo de include.
+
+Ao puxar o token include ele empilha um novo stream para o arquivo a ser incluido. O stream usado pelo scanner é sempre o arquivo do topo da pilha. Ao final do arquivo (token eof) ele faz o pop e continua usando o stream anterior.
+
+Alguns tokens raw podem ser renomeados. Exemplo, se um token "defined" for criado ao virar um token C ele pode virar um identificador.
 
 ```
 Scanner scanner;
 Scanner_GetNext(&scanner, lexeme, token);
 ```
 
-#define
+##define
 O Scanner possui um mapa para defines. Este mapa é usado no ifdef ifndef.
 Depois vai ser usado para fazer a substituição das macros.
 
-#if
+##if
 Não implementado.
 
 ##ifdef ifndef elseif endif
@@ -75,9 +83,9 @@ Para achar o #else ou #endif correspondente é feita uma contagem ++ para cada #
 Ao encontrar #endif com contagem zero ele é o que fecha.
 
 
-#undef
+##undef
 
-#error
+##error
 
 
 
