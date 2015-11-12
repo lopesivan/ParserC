@@ -1,0 +1,5 @@
+
+#define X A
+#define Z X B  
+
+Z

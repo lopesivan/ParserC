@@ -76,3 +76,111 @@ Result FStream_Unget(FStream* pfStream, wchar_t ch)
   }
   return RESULT_OK;
 }
+
+
+
+///////////////////////////////////////////////////////////////////////////////
+
+
+void SStream_Destroy(SStream* pfStream)
+{
+  String_Destroy(&pfStream->name);
+}
+
+Result SStream_Init(SStream* pfStream,
+                    const char* pszName,
+                    const char* psz)
+{
+  String_Init(&pfStream->name, pszName);
+  pfStream->pCharacteres = psz;
+  pfStream->pCurrentChar = pfStream->pCharacteres;
+  pfStream->putBackCharacter = L'\0';
+  return RESULT_OK;
+}
+
+
+Result SStream_Get(SStream* pfStream, wchar_t* ch)
+{
+  Result result;
+  if (pfStream->putBackCharacter != L'\0')
+  {
+    *ch = pfStream->putBackCharacter;
+    pfStream->putBackCharacter = L'\0';
+    result = RESULT_OK;
+  }
+  else if (*pfStream->pCurrentChar == L'\0')
+  {
+      result = RESULT_EOF;
+  }
+  else
+  {
+    *ch = *pfStream->pCurrentChar;
+    pfStream->pCurrentChar++;
+    result = RESULT_OK;
+  }
+  return result;
+}
+
+Result SStream_Unget(SStream* pfStream, wchar_t ch)
+{
+  pfStream->putBackCharacter = ch;
+  return RESULT_OK;
+}
+
+
+
+
+
+void Stream_Destroy(Stream* pfStream)
+{
+  if (pfStream->type == 1)
+    FStream_Destroy(&pfStream->streamObj.fstream);
+  else if (pfStream->type == 2)
+    SStream_Destroy(&pfStream->streamObj.sstream);
+}
+
+
+Result Stream_InitOpen(Stream* pfStream,
+                       const char* fileName)
+{
+  pfStream->type = 1;
+  return FStream_InitOpen(&pfStream->streamObj.fstream, fileName);
+}
+
+Result Stream_InitStr(Stream* pfStream,
+                      const char* pszName, 
+                      const char* psz)
+{
+  pfStream->type = 2;
+  return SStream_Init(&pfStream->streamObj.sstream, pszName, psz);
+}
+
+const char* Stream_GetName(Stream* pfStream)
+{
+  if (pfStream->type == 1)
+    return pfStream->streamObj.fstream.fileName;
+
+  return pfStream->streamObj.sstream.name;
+}
+Result Stream_Get(Stream* pfStream, wchar_t* ch)
+{
+  if (pfStream->type == 1)
+    return FStream_Get(&pfStream->streamObj.fstream, ch);
+ 
+  return SStream_Get(&pfStream->streamObj.sstream, ch);
+}
+
+Result Stream_Unget(Stream* pfStream, wchar_t ch)
+{
+  if (pfStream->type == 1)
+    return FStream_Unget(&pfStream->streamObj.fstream, ch);
+ 
+  return SStream_Unget(&pfStream->streamObj.sstream, ch);
+}
+
+
+
+FStream* Stream_CastFStream(Stream* pfStream)
+{
+  return pfStream->type == 1 ? &pfStream->streamObj.fstream : NULL;
+}

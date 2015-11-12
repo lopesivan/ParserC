@@ -6,21 +6,51 @@
 #include  "assert.h"
 #include  "dmalloc.h"
 
-Result StreamFileItem_Init(StreamFileItem* p, const char* filename)
+Result StreamFileItem_InitOpen(StreamFileItem* p, const char* filename)
 {
-  Result result = FStream_InitOpen(&p->fstream, filename);
+  Result result = Stream_InitOpen(&p->fstream, filename);
   p->pNext = NULL;
   return result;
 }
 
-Result StreamFileItem_Create(StreamFileItem** pp,
-                             const char* fileName)
+Result StreamFileItem_InitStr(StreamFileItem* p,
+                              const char* pszName,
+                              const char* psz)
+{
+  Result result = Stream_InitStr(&p->fstream, pszName, psz);
+  p->pNext = NULL;
+  return result;
+}
+
+
+Result StreamFileItem_CreateOpen(StreamFileItem** pp,
+                                 const char* fileName)
 {
   Result result = RESULT_OUT_OF_MEM;
   StreamFileItem* p = (StreamFileItem*)Malloc(sizeof(StreamFileItem) * 1);
   if (p)
   {
-    result = StreamFileItem_Init(p, fileName);
+    result = StreamFileItem_InitOpen(p, fileName);
+    if (result == RESULT_OK)
+    {
+      *pp = p;
+      p = NULL;
+    }
+    Free(p);
+  }
+  return result;
+}
+
+
+Result StreamFileItem_CreateStr(StreamFileItem** pp,
+                                const char* name,
+                                const char* psz)
+{
+  Result result = RESULT_OUT_OF_MEM;
+  StreamFileItem* p = (StreamFileItem*)Malloc(sizeof(StreamFileItem) * 1);
+  if (p)
+  {
+    result = StreamFileItem_InitStr(p, name, psz);
     if (result == RESULT_OK)
     {
       *pp = p;
@@ -33,7 +63,7 @@ Result StreamFileItem_Create(StreamFileItem** pp,
 
 void StreamFileItem_Destroy(StreamFileItem* p)
 {
-  FStream_Destroy(&p->fstream);
+  Stream_Destroy(&p->fstream);
 }
 
 void StreamFileItem_Delete(StreamFileItem* p)
@@ -71,8 +101,7 @@ Result Scanner_InitOpen(Scanner* scanner,
       }
       MapStrToPtr_Destroy(&scanner->mapOnce, NULL);
     }
-  }
-  while (0);
+  } while (0);
 
 
   return result;
@@ -82,21 +111,41 @@ Result Scanner_Close(Scanner* scanner)
 {
   if (scanner->pHead)
   {
-    printf("\n ------ close %s -------- \n", scanner->pHead->fstream.fileName);
-
-    StreamFileItem* p = scanner->pHead;
-    scanner->pHead = scanner->pHead->pNext;
-    StreamFileItem_Delete(p);
-
-    if (scanner->pHead != NULL)
-    {
-      printf("\n ------ continue %s -------- \n", scanner->pHead->fstream.fileName);
-    }
-    return scanner->pHead != NULL ? RESULT_OK : RESULT_EOF;
+    printf("\n ------ close %s -------- \n",
+           Stream_GetName(&scanner->pHead->fstream));
   }
-  return RESULT_EOF;
+
+  StreamFileItem* p = scanner->pHead;
+  scanner->pHead = scanner->pHead->pNext;
+  StreamFileItem_Delete(p);
+
+
+  if (scanner->pHead != NULL)
+  {
+    printf("\n ------ continue %s -------- \n",
+           Stream_GetName(&scanner->pHead->fstream));
+  }
+  return scanner->pHead != NULL ? RESULT_OK : RESULT_EOF;
 }
 
+
+Result Scanner_OpenMacro(Scanner* scanner,
+                         const char* name,
+                         const char* psz)
+{
+  printf("\n ------ macro %s -------- \n", name);
+
+  StreamFileItem* p;
+  Result result = StreamFileItem_CreateStr(&p, name, psz);
+
+  if (result == RESULT_OK)
+  {
+    p->pNext = scanner->pHead;
+    scanner->pHead = p;
+  }
+
+  return result;
+}
 Result Scanner_Open(Scanner* scanner,
                     const char* filename)
 {
@@ -110,7 +159,7 @@ Result Scanner_Open(Scanner* scanner,
   printf("\n ------ include %s -------- \n", filename);
 
   StreamFileItem* p;
-  Result result = StreamFileItem_Create(&p, filename);
+  Result result = StreamFileItem_CreateOpen(&p, filename);
 
   if (result == RESULT_OK)
   {
@@ -126,7 +175,7 @@ void Scanner_Destroy(Scanner* scanner)
   StreamFileItem* pCurrent = scanner->pHead;
   while (pCurrent)
   {
-    FStream_Destroy(&pCurrent->fstream);
+    Stream_Destroy(&pCurrent->fstream);
     pCurrent = pCurrent->pNext;
   }
 
@@ -137,16 +186,16 @@ void Scanner_Destroy(Scanner* scanner)
 
 static Result Scanner_NextTokenCore(Scanner* scanner,
                                     StrBuilder* lexeme,
-                                    enum PlaygroundLang_Tokens* tk)
+enum PlaygroundLang_Tokens* tk)
 {
-  StrBuilder_Clear(lexeme);
+
 
   int lastGoodState = -2;
   int currentState = 0;
   wchar_t ch;
   int index = 0;
 
-  Result r = FStream_Get(&scanner->pHead->fstream, &ch);
+  Result r = Stream_Get(&scanner->pHead->fstream, &ch);
 
   while (r == RESULT_OK)
   {
@@ -161,7 +210,7 @@ static Result Scanner_NextTokenCore(Scanner* scanner,
 
     if (currentState == -1)
     {
-      FStream_Unget(&scanner->pHead->fstream, ch);
+      Stream_Unget(&scanner->pHead->fstream, ch);
       break;
     }
 
@@ -174,7 +223,12 @@ static Result Scanner_NextTokenCore(Scanner* scanner,
     }
 
     StrBuilder_AppendWChar(lexeme, ch);
-    r = FStream_Get(&scanner->pHead->fstream, &ch);
+    r = Stream_Get(&scanner->pHead->fstream, &ch);
+    if (r == RESULT_EOF)
+    {
+      r = RESULT_OK;
+      break;
+    }
   }
 
 
@@ -183,7 +237,7 @@ static Result Scanner_NextTokenCore(Scanner* scanner,
 
 static Result Scanner_NextTokentoEndOfLine(Scanner* scanner,
     StrBuilder* lexeme,
-    enum PlaygroundLang_Tokens* token)
+enum PlaygroundLang_Tokens* token)
 {
   bool old = scanner->bIgnoreBreakLine;
   scanner->bIgnoreBreakLine = false;
@@ -211,11 +265,13 @@ static Result Scanner_NextTokentoEndOfLine(Scanner* scanner,
 
 static Result Scanner_NextToken(Scanner* scanner,
                                 StrBuilder* lexeme,
-                                enum PlaygroundLang_Tokens* token)
+enum PlaygroundLang_Tokens* token)
 {
+
   Result result;
   for (;;)
   {
+    StrBuilder_Clear(lexeme);
     result = Scanner_NextTokenCore(scanner,
     lexeme,
     token);
@@ -245,9 +301,9 @@ static Result Scanner_NextToken(Scanner* scanner,
 }
 
 Result Match(Scanner* scanner,
-             enum PlaygroundLang_Tokens expected,
-             enum PlaygroundLang_Tokens* token,
-             StrBuilder* lexeme)
+enum PlaygroundLang_Tokens expected,
+enum PlaygroundLang_Tokens* token,
+  StrBuilder* lexeme)
 {
   if (*token != expected)
     return RESULT_FAIL;
@@ -267,12 +323,12 @@ static void PopChar(StrBuilder* strBuilder)
 
 static Result Scanner_NextTokentoEndOfLine(Scanner* scanner,
     StrBuilder* lexeme,
-    enum PlaygroundLang_Tokens* token);
+enum PlaygroundLang_Tokens* token);
 
 
 Result Parse_FileName(Scanner* scanner,
-                      enum PlaygroundLang_Tokens* token,
-                      StrBuilder* lexeme)
+enum PlaygroundLang_Tokens* token,
+  StrBuilder* lexeme)
 {
   Result result = RESULT_FAIL;
   if (*token == TKSTRING)
@@ -318,9 +374,9 @@ Result Parse_FileName(Scanner* scanner,
 
 
 Result Parse_IfDef(Scanner* scanner,
-                   enum PlaygroundLang_Tokens* token,
-                   StrBuilder* lexeme,
-                   bool* evalResult)
+enum PlaygroundLang_Tokens* token,
+  StrBuilder* lexeme,
+bool* evalResult)
 {
   Result result = Match(scanner,
   TKPreIfDef,
@@ -335,16 +391,16 @@ Result Parse_IfDef(Scanner* scanner,
   lexeme->c_str,
   &pchar);
 
-  * evalResult = result == RESULT_OK;
+  *evalResult = result == RESULT_OK;
 
   return RESULT_OK;
 }
 
 
 Result Parse_IfNDef(Scanner* scanner,
-                    enum PlaygroundLang_Tokens* token,
-                    StrBuilder* lexeme,
-                    bool* evalResult)
+enum PlaygroundLang_Tokens* token,
+  StrBuilder* lexeme,
+bool* evalResult)
 {
   Result result = Match(scanner,
   TKPreIfNDef,
@@ -359,15 +415,42 @@ Result Parse_IfNDef(Scanner* scanner,
   lexeme->c_str,
   &pchar);
 
-  * evalResult = result != RESULT_OK;
+  *evalResult = result != RESULT_OK;
 
   return RESULT_OK;
 }
 
+Result Parse_DefineIdentifer(Scanner* scanner,
+enum PlaygroundLang_Tokens* token,
+  StrBuilder* lexeme,
+const char* psz)
+{
+  StrBuilder lexemeTemp;
+  StrBuilder_Init(&lexemeTemp, 0);
+  StrBuilder_Swap(&lexemeTemp, lexeme);
+
+  
+  //Result result = Match(scanner,
+  //TKIdentifier,
+  //token,
+  //lexeme);
+
+  Result result = Scanner_OpenMacro(scanner, lexemeTemp.c_str, psz);
+
+  StrBuilder_Destroy(&lexemeTemp);
+
+  if (result != RESULT_OK &&
+      result != RESULT_EOF)
+  {
+    return result;
+  }
+
+  return result;
+}
 
 Result Parse_Include(Scanner* scanner,
-                     enum PlaygroundLang_Tokens* token,
-                     StrBuilder* lexeme)
+enum PlaygroundLang_Tokens* token,
+  StrBuilder* lexeme)
 {
   Result result = Match(scanner,
   TKPreInclude,
@@ -384,8 +467,8 @@ Result Parse_Include(Scanner* scanner,
 
 
 Result Parse_Pragma(Scanner* scanner,
-                    enum PlaygroundLang_Tokens* token,
-                    StrBuilder* lexeme)
+enum PlaygroundLang_Tokens* token,
+  StrBuilder* lexeme)
 {
 
   Result result = Match(scanner,
@@ -398,15 +481,20 @@ Result Parse_Pragma(Scanner* scanner,
 
   if (strcmp(lexeme->c_str, "once") == 0)
   {
-    MapStrToPtr_Set(&scanner->mapOnce,
-    scanner->pHead->fstream.fileName,
-    0);
+    FStream* pf = Stream_CastFStream(&scanner->pHead->fstream);
+
+    if (pf)
+    {
+      MapStrToPtr_Set(&scanner->mapOnce,
+      pf->fileName,
+      0);
+    }
   }
 
   //ignorar tudo ate o fim da linha
   result = Scanner_NextTokentoEndOfLine(scanner,
-  lexeme,
-  token);
+                                        lexeme,
+                                        token);
 
   //result = Match(scanner,
   //TKIdentifier,
@@ -423,8 +511,8 @@ Result Parse_Pragma(Scanner* scanner,
 
 
 Result Parse_Define(Scanner* scanner,
-                    enum PlaygroundLang_Tokens* token,
-                    StrBuilder* lexeme)
+enum PlaygroundLang_Tokens* token,
+  StrBuilder* lexeme)
 {
 
   Result result = Match(scanner,
@@ -465,9 +553,9 @@ Result Parse_Define(Scanner* scanner,
 }
 
 Result PreIgnore(Scanner* scanner,
-                 enum PlaygroundLang_Tokens* token,
-                 StrBuilder* lexeme,
-                 bool* bElse)
+enum PlaygroundLang_Tokens* token,
+  StrBuilder* lexeme,
+bool* bElse)
 {
 
   int count = 0;
@@ -487,7 +575,7 @@ Result PreIgnore(Scanner* scanner,
     }
 
     if (count == 0 &&
-        (*token == TKPreElse||
+        (*token == TKPreElse ||
          *token == TKPreEndif))
     {
       *bElse = (*token == TKPreElse);
@@ -498,9 +586,11 @@ Result PreIgnore(Scanner* scanner,
 }
 
 Result Scanner_GetTokenFinal(Scanner* scanner,
-                             enum PlaygroundLang_Tokens* token,
-                             StrBuilder* lexeme)
+enum PlaygroundLang_Tokens* token,
+  StrBuilder* lexeme)
 {
+
+
   if (scanner->pHead == NULL)
     return RESULT_EOF;
 
@@ -528,8 +618,25 @@ Result Scanner_GetTokenFinal(Scanner* scanner,
     if (result != RESULT_OK)
       break;
 
-
-    if (*token == TKPrePragma)
+    if (*token == TKIdentifier)
+    {
+      const char* psz;
+      result = MapStrToStr_Find(&scanner->mapDefines,
+                                    lexeme->c_str, &psz);
+      if (result == RESULT_OK)
+      {
+        //é uma macro
+        Parse_DefineIdentifer(scanner, token, lexeme, psz);
+      }
+      else
+      {
+        //não é uma macro
+        result = RESULT_OK;
+        break;
+      }
+      continue;
+    }
+    else if (*token == TKPrePragma)
     {
       Parse_Pragma(scanner, token, lexeme);
       continue;

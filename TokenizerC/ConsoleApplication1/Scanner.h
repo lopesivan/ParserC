@@ -7,7 +7,7 @@
 
 typedef struct StreamFileItemTag
 {
-  FStream fstream;
+  Stream fstream;
   struct StreamFileItemTag* pNext;
 } StreamFileItem;
 
@@ -24,6 +24,9 @@ typedef struct
   int ifdefCount;
 } Scanner;
 
+
+Result Scanner_OpenMacro(Scanner* scanner,
+                         const char* psz);
 
 Result Scanner_Open(Scanner* scanner,
                     const char* filename);
