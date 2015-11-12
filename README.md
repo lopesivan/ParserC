@@ -91,6 +91,5 @@ Ao encontrar #endif com contagem zero ele é o que fecha.
 #substituição das macros
 O processo de subtituir as macros é semelhante ao include. Porem ao inves de abrir um stream de arquivo é aberto um stream de string que contem o conteudo do define. O stream é empilhado da mesma forma que os includes.
 
-
-
+Os parametros da macro sao empilhados como se fossem defines temporarios.
 
